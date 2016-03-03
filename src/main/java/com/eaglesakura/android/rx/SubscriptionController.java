@@ -24,7 +24,10 @@ public class SubscriptionController {
      */
     private List<StateController> mStateControllers = new ArrayList<>();
 
-    private LifecycleState mState;
+    /**
+     * 初期ステートはNew
+     */
+    private LifecycleState mState = LifecycleState.NewObject;
 
     private ThreadController mThreadController = new ThreadController();
 
@@ -34,13 +37,17 @@ public class SubscriptionController {
     private Handler mHandler = new Handler(Looper.getMainLooper());
 
     public SubscriptionController() {
-        mStateControllers.add(new StateController(ObserveTarget.Forground));
-        mStateControllers.add(new StateController(ObserveTarget.Alive));
-        mStateControllers.add(new StateController(ObserveTarget.FireAndForget));
+        for (ObserveTarget obs : ObserveTarget.values()) {
+            mStateControllers.add(new StateController(obs));
+        }
     }
 
     public ThreadController getThreadController() {
         return mThreadController;
+    }
+
+    public Handler getHandler() {
+        return mHandler;
     }
 
     /**
@@ -108,6 +115,9 @@ public class SubscriptionController {
             if (mCallbackTarget == ObserveTarget.FireAndForget) {
                 // 打ちっぱなしならキャンセルはしなくて良い
                 return false;
+            } else if (mCallbackTarget == ObserveTarget.CurrentForeground) {
+                // resume状態以外はキャンセルとして扱う
+                return mState.ordinal() >= LifecycleState.OnPaused.ordinal() || mSubscription.isUnsubscribed();
             } else {
                 // それ以外なら購読フラグと連動する
                 return mSubscription.isUnsubscribed();
@@ -126,7 +136,8 @@ public class SubscriptionController {
             final int endStateOrder;
 
             switch (mCallbackTarget) {
-                case Forground:
+                case Foreground:
+                case CurrentForeground:
                     beginStateOrder = LifecycleState.OnResumed.ordinal();
                     endStateOrder = LifecycleState.OnPaused.ordinal();
                     break;
@@ -150,7 +161,12 @@ public class SubscriptionController {
         }
 
         void onNext() {
-            if (!isPending() && !mPendings.isEmpty()) {
+            if (mCallbackTarget == ObserveTarget.CurrentForeground && mState == LifecycleState.OnResumed) {
+                // Pauseを解除されたタイミングで、保留コールバックを全て排除する
+                mPendings.clear();
+            }
+
+            if (!mPendings.isEmpty() && !isPending()) {
                 // 保留から解除されたら、保留されていたタスクを流す
                 List<Runnable> executes = new ArrayList<>(mPendings);
                 mPendings.clear();

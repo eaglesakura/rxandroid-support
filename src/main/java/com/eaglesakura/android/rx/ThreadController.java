@@ -7,6 +7,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import rx.Scheduler;
+import rx.android.schedulers.AndroidSchedulers;
 import rx.schedulers.Schedulers;
 
 /**
@@ -48,8 +49,11 @@ class ThreadController {
     public Scheduler getScheduler(SubscribeTarget target) {
         if (target == SubscribeTarget.NewThread) {
             return Schedulers.newThread();
+        } else if (target == SubscribeTarget.MainThread) {
+            return AndroidSchedulers.mainThread();
+        } else {
+            return mThreads.get(target.ordinal()).getScheduler();
         }
-        return mThreads.get(target.ordinal()).getScheduler();
     }
 
     /**

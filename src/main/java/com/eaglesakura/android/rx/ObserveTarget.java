@@ -7,7 +7,14 @@ public enum ObserveTarget {
     /**
      * onResume - onPauseの間のみコールバックを受け付ける
      */
-    Forground,
+    Foreground,
+
+    /**
+     * 現在の前面処理のみコールバックを受け付ける。
+     *
+     * onPauseのタイミングで、保留されているキューは全て廃棄される。
+     */
+    CurrentForeground,
 
     /**
      * onCreate - onDestroyの間のみコールバックを受け付ける

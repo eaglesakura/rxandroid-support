@@ -94,6 +94,21 @@ public enum SubscribeTarget {
         int getThreadPoolNum() {
             return 0;
         }
+    },
+
+    /**
+     * UiThreadで処理する
+     */
+    MainThread {
+        @Override
+        int getKeepAliveMs() {
+            return 0;
+        }
+
+        @Override
+        int getThreadPoolNum() {
+            return 0;
+        }
     };
 
     /**
