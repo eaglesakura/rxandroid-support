@@ -44,7 +44,11 @@ android {
  * UnitTest & retro lambda
  */
 tasks.withType(Test) {
-    project.tasks.each { task ->
+    project.tasks
+            .findAll {
+        task -> (task.name ==~ /compile.*?TestJava.*?/)
+    }
+    .each { task ->
         task.doFirst {
             sourceCompatibility = JavaVersion.VERSION_1_8
             targetCompatibility = JavaVersion.VERSION_1_8

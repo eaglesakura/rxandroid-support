@@ -17,6 +17,9 @@ import rx.subscriptions.CompositeSubscription;
  * Fragment等と関連付けられ、そのライフサイクルを離れると自動的にコールバックを呼びださなくする。
  */
 public class SubscriptionController {
+    /**
+     * 通常処理されるSubscription
+     */
     private CompositeSubscription mSubscription = new CompositeSubscription();
 
     /**
@@ -82,8 +85,10 @@ public class SubscriptionController {
         return this;
     }
 
-    SubscriptionController add(Subscription s) {
-        mSubscription.add(s);
+    SubscriptionController add(ObserveTarget target, Subscription s) {
+        if (target != ObserveTarget.FireAndForget) {
+            mSubscription.add(s);
+        }
         return this;
     }
 
@@ -128,8 +133,9 @@ public class SubscriptionController {
          * 保留状態であればtrue
          */
         boolean isPending() {
-            if (mState == null) {
-                return true;
+            if (mState == null || mCallbackTarget == ObserveTarget.FireAndForget) {
+                // ステートが指定されてないか、撃ちっぱなしであれば保留は行わない
+                return false;
             }
 
             final int beginStateOrder;
@@ -144,10 +150,6 @@ public class SubscriptionController {
                 case Alive:
                     beginStateOrder = LifecycleState.OnCreated.ordinal();
                     endStateOrder = LifecycleState.OnDestroyed.ordinal();
-                    break;
-                case FireAndForget:
-                    beginStateOrder = LifecycleState.OnCreated.ordinal();
-                    endStateOrder = 99999;
                     break;
                 default:
                     // not impl

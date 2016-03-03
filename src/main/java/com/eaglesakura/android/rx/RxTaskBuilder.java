@@ -217,7 +217,7 @@ public class RxTaskBuilder<T> {
                 );
 
                 // 購読対象に追加
-                mSubscription.add(subscribe);
+                mSubscription.add(mTask.mObserveTarget, subscribe);
             });
             return mTask;
         }

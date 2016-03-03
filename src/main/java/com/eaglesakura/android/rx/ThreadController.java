@@ -76,7 +76,7 @@ class ThreadController {
         public Scheduler getScheduler() {
             synchronized (this) {
                 if (mScheduler == null) {
-                    mExecutor = new ThreadPoolExecutor(1, mTarget.getThreadPoolNum(), mTarget.getKeepAliveMs(), TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+                    mExecutor = new ThreadPoolExecutor(0, mTarget.getThreadPoolNum(), mTarget.getKeepAliveMs(), TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
                     mScheduler = Schedulers.from(mExecutor);
                 }
                 return mScheduler;
@@ -85,9 +85,11 @@ class ThreadController {
 
         public void dispose() {
             synchronized (this) {
-                if (mExecutor != null) {
-                    mExecutor.shutdown();
-                }
+                // MEMO: ThreadPoolは時間経過で自動的に消滅するため、明示的な解放は行わないようにする
+                // これはFire&Forgetでスレッドが処理される前にshutdownされることを防ぐため。
+//                if (mExecutor != null) {
+//                    mExecutor.shutdown();
+//                }
             }
         }
     }

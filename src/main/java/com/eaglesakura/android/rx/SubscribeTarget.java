@@ -30,7 +30,7 @@ public enum SubscribeTarget {
 
         @Override
         int getThreadPoolNum() {
-            return 5;
+            return 3;
         }
     },
 
@@ -60,7 +60,7 @@ public enum SubscribeTarget {
 
         @Override
         int getThreadPoolNum() {
-            return 1;
+            return 5;
         }
     },
 
