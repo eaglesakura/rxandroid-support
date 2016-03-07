@@ -2,6 +2,8 @@ package com.eaglesakura.android.rx;
 
 import com.eaglesakura.android.rx.error.TaskCanceledException;
 
+import android.os.Looper;
+
 import java.util.concurrent.TimeUnit;
 
 import rx.Observable;
@@ -32,6 +34,11 @@ public class RxTaskBuilder<T> {
      * チェーンの親となるビルダー
      */
     final RxTaskBuilder<T> mParentBuilder;
+
+    /**
+     * タスクをスタート済みであればtrue
+     */
+    boolean mStartedTask = false;
 
     public RxTaskBuilder(SubscriptionController subscriptionController) {
         this(null, subscriptionController);
@@ -81,6 +88,16 @@ public class RxTaskBuilder<T> {
     }
 
     /**
+     * タスク名を指定する。
+     *
+     * タスク名はそのままスレッド名として利用される。
+     */
+    public RxTaskBuilder<T> name(String name) {
+        mTask.mName = name;
+        return this;
+    }
+
+    /**
      * エラー時のダミー戻り値を指定する。
      */
     public RxTaskBuilder<T> errorReturn(RxTask.ErrorReturn<T> action) {
@@ -113,6 +130,29 @@ public class RxTaskBuilder<T> {
     }
 
     /**
+     * スレッド名を指定する
+     *
+     * 指定されていない場合は何もしない。
+     */
+    void bindThreadName() {
+        if (mTask.mName == null) {
+            return;
+        }
+
+        Thread current = Thread.currentThread();
+        if (current.equals(Looper.getMainLooper().getThread())) {
+            // UIスレッド名は変更できない
+            return;
+        }
+
+        try {
+            Thread.currentThread().setName("RxTask::" + mTask.mName);
+        } catch (Exception e) {
+
+        }
+    }
+
+    /**
      * 非同期処理を指定する
      */
     public RxTaskBuilder<T> async(RxTask.Async<T> subscribe) {
@@ -120,6 +160,8 @@ public class RxTaskBuilder<T> {
             synchronized (mTask) {
                 try {
                     mTask.mState = RxTask.State.Running;
+
+                    bindThreadName();
 
                     T result = subscribe.call((RxTask<T>) mTask);
                     if (mTask.isCanceled()) {
@@ -190,18 +232,28 @@ public class RxTaskBuilder<T> {
         return result;
     }
 
+    public boolean isStartedTask() {
+        return mStartedTask;
+    }
+
     /**
      * セットアップを完了し、処理を開始する
      */
     public RxTask start() {
-        if (mParentBuilder != null) {
+        if (mParentBuilder != null && !mParentBuilder.isStartedTask()) {
             // 親がいるなら、親を開始する
             return mParentBuilder.start();
         } else {
+            if (isStartedTask()) {
+                // 既にタスクが起動済みのため、再度起動することはできない
+                throw new IllegalStateException();
+            }
+
             // 自分が最上位なので、自分が実行を開始する
             mTask.mState = RxTask.State.Pending;
             // キャンセルを購読対象と同期させる
             mTask.mSubscribeCancelSignal = (task) -> mSubscription.isCanceled(mTask.mObserveTarget);
+            mStartedTask = true;
 
             // 開始タイミングをズラす
             mSubscription.getHandler().post(() -> {

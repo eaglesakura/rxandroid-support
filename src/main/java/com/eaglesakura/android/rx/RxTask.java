@@ -1,6 +1,9 @@
 package com.eaglesakura.android.rx;
 
+import com.eaglesakura.android.rx.error.RxTaskException;
 import com.eaglesakura.android.rx.error.TaskCanceledException;
+
+import android.graphics.Shader;
 
 import rx.Observable;
 
@@ -70,6 +73,11 @@ public class RxTask<T> {
      */
     RxTaskBuilder mChainTask;
 
+    /**
+     * タスク名
+     */
+    String mName = "Task::" + getClass().getName();
+
     public enum State {
         /**
          * タスクを生成中
@@ -107,6 +115,29 @@ public class RxTask<T> {
      */
     public T getResult() {
         return mResult;
+    }
+
+    /**
+     * 指定時間だけウェイトをかける。
+     *
+     * 途中でキャンセルされた場合は例外を投げて終了される
+     */
+    public void waitTime(long timeMs) throws RxTaskException {
+        if (timeMs <= 0) {
+            return;
+        }
+
+        final long START_TIME = System.currentTimeMillis();
+        while ((System.currentTimeMillis() - START_TIME) < timeMs) {
+            try {
+                Thread.sleep(1);
+            } catch (Exception e) {
+            }
+
+            if (isCanceled()) {
+                throw new TaskCanceledException();
+            }
+        }
     }
 
     /**
@@ -195,10 +226,12 @@ public class RxTask<T> {
 
     private void handleChain() {
         // 連続実行タスクが残っているなら、チェーンで実行を開始する
-        if (mChainTask != null) {
-            mChainTask.start();
-            mChainTask = null;
-        }
+        mSubscription.run(mObserveTarget, () -> {
+            if (mChainTask != null) {
+                mChainTask.start();
+                mChainTask = null;
+            }
+        });
     }
 
     private void handleFailed(Throwable error) {
