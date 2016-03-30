@@ -2,10 +2,12 @@ package com.eaglesakura.android.rx;
 
 
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Looper;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 import rx.Subscription;
 import rx.subjects.BehaviorSubject;
@@ -13,7 +15,7 @@ import rx.subscriptions.CompositeSubscription;
 
 /**
  * 実行対象のスレッドと、コールバック対象のスレッドをそれぞれ管理する。
- *
+ * <p>
  * Fragment等と関連付けられ、そのライフサイクルを離れると自動的にコールバックを呼びださなくする。
  */
 public class SubscriptionController {
@@ -43,6 +45,23 @@ public class SubscriptionController {
         for (ObserveTarget obs : ObserveTarget.values()) {
             mStateControllers.add(new StateController(obs));
         }
+    }
+
+    /**
+     * 現在認識されているステートを取得する
+     */
+    public LifecycleState getState() {
+        return mState;
+    }
+
+    /**
+     * ユニットテスト用のハンドラを構築する
+     */
+    public SubscriptionController startUnitTest() {
+        HandlerThread handlerThread = new HandlerThread("UnitTestCallback");
+        handlerThread.start();
+        mHandler = new Handler(handlerThread.getLooper());
+        return this;
     }
 
     public ThreadController getThreadController() {
@@ -94,11 +113,39 @@ public class SubscriptionController {
 
     /**
      * 実行クラスを渡し、処理を行わせる。
-     *
+     * <p>
      * 実行保留中であれば一旦キューに貯め、resumeのタイミングでキューを全て実行させる。
      */
     public void run(ObserveTarget target, Runnable callback) {
         mStateControllers.get(target.ordinal()).run(callback);
+    }
+
+    /**
+     * 実行クラスを渡し、実行待ちを行う。
+     *
+     * デッドロック等の事情によりタイムアウトやフリーズの原因になるので、実行には注意すること。
+     *
+     * @param target    実行条件
+     * @param callback  実行内容
+     * @param timeoutMs 待ち時間
+     */
+    public void runWithWait(ObserveTarget target, Runnable callback, long timeoutMs) throws TimeoutException {
+        Object lock = new Object();
+        run(target, () -> {
+            try {
+                callback.run();
+            } finally {
+                synchronized (lock) {
+                    lock.notifyAll();
+                }
+            }
+        });
+        synchronized (lock) {
+            try {
+                lock.wait(timeoutMs);
+            } catch (Exception e) {
+            }
+        }
     }
 
     /**
@@ -138,28 +185,22 @@ public class SubscriptionController {
                 return false;
             }
 
-            final int beginStateOrder;
-            final int endStateOrder;
-
             switch (mCallbackTarget) {
+                // オブジェクトがForegroundにあるなら
                 case Foreground:
-                case CurrentForeground:
-                    beginStateOrder = LifecycleState.OnResumed.ordinal();
-                    endStateOrder = LifecycleState.OnPaused.ordinal();
-                    break;
-                case Alive:
-                    beginStateOrder = LifecycleState.OnCreated.ordinal();
-                    endStateOrder = LifecycleState.OnDestroyed.ordinal();
-                    break;
+                case CurrentForeground: {
+                    return mState.ordinal() < LifecycleState.OnResumed.ordinal()
+                            || mState.ordinal() >= LifecycleState.OnPaused.ordinal();
+                }
+                // オブジェクトが生きているなら
+                case Alive: {
+                    return mState.ordinal() < LifecycleState.OnCreated.ordinal()
+                            || mState.ordinal() >= LifecycleState.OnDestroyed.ordinal();
+                }
                 default:
                     // not impl
                     throw new IllegalStateException();
             }
-
-            final int currentOrder = mState.ordinal();
-
-            return currentOrder < beginStateOrder
-                    || currentOrder > endStateOrder;
         }
 
         void onNext() {

@@ -2,8 +2,7 @@ package com.eaglesakura.android.rx;
 
 import com.eaglesakura.android.rx.error.RxTaskException;
 import com.eaglesakura.android.rx.error.TaskCanceledException;
-
-import android.graphics.Shader;
+import com.eaglesakura.android.rx.error.TaskTimeoutException;
 
 import rx.Observable;
 
@@ -12,6 +11,9 @@ import rx.Observable;
  */
 public class RxTask<T> {
 
+    /**
+     * コールバック管理
+     */
     SubscriptionController mSubscription;
 
     /**
@@ -34,11 +36,14 @@ public class RxTask<T> {
      */
     T mResult;
 
+    /**
+     * 現在の処理ステート
+     */
     State mState = State.Building;
 
     /**
      * コールバック対象を指定する
-     *
+     * <p>
      * デフォルトはFire And Forget
      */
     ObserveTarget mObserveTarget = ObserveTarget.FireAndForget;
@@ -77,6 +82,11 @@ public class RxTask<T> {
      * タスク名
      */
     String mName = "Task::" + getClass().getName();
+
+    /**
+     * デフォルトのタイムアウト指定
+     */
+    long mTimeoutMs = 1000 * 60 * 60;
 
     public enum State {
         /**
@@ -119,7 +129,7 @@ public class RxTask<T> {
 
     /**
      * 指定時間だけウェイトをかける。
-     *
+     * <p>
      * 途中でキャンセルされた場合は例外を投げて終了される
      */
     public void waitTime(long timeMs) throws RxTaskException {
@@ -143,6 +153,19 @@ public class RxTask<T> {
     /**
      * awaitを行い、結果を捨てる
      */
+    public boolean safeAwait(long timeoutMs) {
+        try {
+            await(timeoutMs);
+            return true;
+        } catch (Throwable e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * awaitを行い、結果を捨てる
+     */
     public void safeAwait() {
         try {
             await();
@@ -152,10 +175,33 @@ public class RxTask<T> {
     }
 
     /**
+     * 処理待ちを行う
+     * <p>
+     * timeout等やコールバックと同居するため、実装はただのwaitである。
+     */
+    public T await(long timeoutMs) throws Throwable {
+        final long START_TIME = System.currentTimeMillis();
+        while (!isFinished() && ((System.currentTimeMillis() - START_TIME) < timeoutMs)) {
+            try {
+                Thread.sleep(1);
+            } catch (Exception e) {
+            }
+        }
+
+        throwIfError();
+
+        if (!isFinished()) {
+            throw new TaskTimeoutException();
+        }
+
+        return mResult;
+    }
+
+    /**
      * 処理の完了待ちを行う
      */
     public T await() throws Throwable {
-        return mObservable.toBlocking().first();
+        return await(mTimeoutMs);
     }
 
     /**
@@ -171,6 +217,15 @@ public class RxTask<T> {
     public void throwIfError() throws Throwable {
         if (mError != null) {
             throw mError;
+        }
+    }
+
+    /**
+     * タスクがキャンセルされていたら例外を投げて処理を強制終了する
+     */
+    public void throwIfCanceled() throws TaskCanceledException {
+        if (isCanceled()) {
+            throw new TaskCanceledException();
         }
     }
 
@@ -373,7 +428,7 @@ public class RxTask<T> {
 
     /**
      * 各種チェック用のコールバック関数
-     * <p/>
+     * <p>
      * cancel()メソッドを呼び出すか、このコールバックがisCanceled()==trueになった時点でキャンセル扱いとなる。
      */
     public interface Signal<T> {
