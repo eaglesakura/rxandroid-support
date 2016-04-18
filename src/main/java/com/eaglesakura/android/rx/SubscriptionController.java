@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
 
+import rx.Observable;
 import rx.Subscription;
 import rx.subjects.BehaviorSubject;
 import rx.subscriptions.CompositeSubscription;
@@ -40,6 +41,8 @@ public class SubscriptionController {
      * 処理をワンテンポ遅らせるためのハンドラ
      */
     private Handler mHandler = new Handler(Looper.getMainLooper());
+
+    private Observable<LifecycleState> mObservable;
 
     public SubscriptionController() {
         for (ObserveTarget obs : ObserveTarget.values()) {
@@ -81,11 +84,16 @@ public class SubscriptionController {
         return mStateControllers.get(observeTarget.ordinal()).isCanceled();
     }
 
+    public Observable<LifecycleState> getObservable() {
+        return mObservable;
+    }
+
     /**
      * ライフサイクルをバインドする
      */
     public SubscriptionController bind(BehaviorSubject<LifecycleState> behavior) {
-        behavior.asObservable().subscribe(next -> {
+        mObservable = behavior.asObservable();
+        mObservable.subscribe(next -> {
             // 継承されたActivityやFragmentはsuper.onの呼び出しで前後が生じるため、統一させるために必ずワンテンポ処理を遅らせる
             mHandler.post(() -> {
                 mState = next;
