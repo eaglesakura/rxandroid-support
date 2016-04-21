@@ -47,6 +47,42 @@ public class RxTaskBuilderAndroidTest extends ModuleTestCase {
         }
     }
 
+    public void test_タスクのメモリリークがないことを確認する() throws Throwable {
+        AndroidThreadUtil.assertBackgroundThread();
+        assertTrue(isTestingThread());
+
+        LifecycleItem item = new LifecycleItem();
+        try {
+            item.onResume();
+
+            for (int i = 0; i < 128; ++i) {
+                for (int k = 0; k < 128; ++k) {
+                    RxTask rxTask = new RxTaskBuilder<byte[]>(item.mSubscriptionController)
+                            .async(new RxTask.Async<byte[]>() {
+                                byte[] buffer;
+
+                                @Override
+                                public byte[] call(RxTask<byte[]> task) throws Throwable {
+                                    buffer = new byte[1024 * 1024];
+                                    return buffer;
+                                }
+                            })
+                            .observeOn(ObserveTarget.FireAndForget)
+                            .subscribeOn(SubscribeTarget.Pipeline)
+                            .start();
+
+                    byte[] buffer = (byte[]) rxTask.await();
+                    assertNotNull(buffer);
+                    assertEquals(buffer.length, 1024 * 1024);
+                }
+                System.gc();
+            }
+        } finally {
+            item.onPause();
+            item.onDestroy();
+        }
+    }
+
     public void test_タスクチェインが実行されて最後の値が取得できる() throws Throwable {
         AndroidThreadUtil.assertBackgroundThread();
         assertTrue(isTestingThread());

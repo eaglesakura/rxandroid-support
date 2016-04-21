@@ -365,11 +365,16 @@ public class RxTask<T> {
             mResult = result;
 
             handleCanceled();
-            handleCompleted(result);
-            handleFinalize();
-
-            // 次のタスクを実行開始する
-            handleChain();
+            try {
+                handleCompleted(result);
+                handleFinalize();
+                // 次のタスクを実行開始する
+                handleChain();
+            } catch (Throwable error) {
+                // Completed処理に失敗した
+                mResult = null;
+                setError(error);
+            }
         }
     }
 

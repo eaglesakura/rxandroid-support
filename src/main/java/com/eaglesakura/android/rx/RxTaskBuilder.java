@@ -194,6 +194,7 @@ public class RxTaskBuilder<T> {
         })
                 .subscribeOn(mSubscription.getThreadController().getScheduler(mThreadTarget))
                 .observeOn(AndroidSchedulers.mainThread());
+//                .unsubscribeOn(AndroidSchedulers.mainThread());
         return this;
     }
 
