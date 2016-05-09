@@ -12,12 +12,8 @@ public class OnSaveEvent implements LifecycleEvent {
     @NonNull
     final Bundle mBundle;
 
-    @NonNull
-    final PersistableBundle mPersistableBundle;
-
-    public OnSaveEvent(Bundle bundle, PersistableBundle outPersistentState) {
+    public OnSaveEvent(Bundle bundle) {
         mBundle = bundle;
-        mPersistableBundle = outPersistentState;
     }
 
     @Override
@@ -28,10 +24,5 @@ public class OnSaveEvent implements LifecycleEvent {
     @NonNull
     public Bundle getBundle() {
         return mBundle;
-    }
-
-    @NonNull
-    public PersistableBundle getPersistableBundle() {
-        return mPersistableBundle;
     }
 }
