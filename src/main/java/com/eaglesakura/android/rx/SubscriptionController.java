@@ -1,6 +1,8 @@
 package com.eaglesakura.android.rx;
 
 
+import com.eaglesakura.android.rx.event.LifecycleEventImpl;
+
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
@@ -126,6 +128,18 @@ public class SubscriptionController {
      */
     public void run(ObserveTarget target, Runnable callback) {
         mStateControllers.get(target.ordinal()).run(callback);
+    }
+
+    /**
+     * UnitTest用の空のコントローラを生成する
+     */
+    public static SubscriptionController newUnitTestController() {
+        BehaviorSubject<LifecycleEvent> behavior = BehaviorSubject.create(new LifecycleEventImpl(LifecycleState.NewObject));
+        behavior.onNext(new LifecycleEventImpl(LifecycleState.OnResumed));
+
+        SubscriptionController controller = new SubscriptionController();
+        controller.bind(behavior);
+        return controller;
     }
 
     /**
