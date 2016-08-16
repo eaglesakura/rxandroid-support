@@ -210,21 +210,27 @@ public class BackgroundTaskBuilder<T> {
     public BackgroundTaskBuilder<T> async(BackgroundTask.Async<T> subscribe) {
         mObservable = Observable.create((Subscriber<? super T> it) -> {
             synchronized (mTask) {
-                try {
-                    mTask.mState = BackgroundTask.State.Running;
+                mTask.mState = BackgroundTask.State.Running;
+                bindThreadName();
+            }
 
-                    bindThreadName();
+            //  非同期処理中はロックを外す
+            T result;
+            try {
+                result = subscribe.call((BackgroundTask<T>) mTask);
 
-                    T result = subscribe.call((BackgroundTask<T>) mTask);
-                    if (mTask.isCanceled()) {
-                        throw new TaskCanceledException();
-                    } else {
-                        it.onNext(result);
-                        it.onCompleted();
-                    }
-                } catch (Throwable e) {
-                    it.onError(e);
+                if (mTask.isCanceled()) {
+                    throw new TaskCanceledException();
                 }
+            } catch (Throwable e) {
+                it.onError(e);
+                return;
+            }
+
+            // 実行完了をコールする
+            synchronized (mTask) {
+                it.onNext(result);
+                it.onCompleted();
             }
         })
                 .subscribeOn(mController.getThreadController().getScheduler(mThreadTarget))

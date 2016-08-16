@@ -2,6 +2,7 @@ package com.eaglesakura.android.rx;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -43,8 +44,6 @@ class ThreadControllerImpl {
 
     /**
      * 処理対象のスケジューラを取得する
-     *
-     * MEMO : スケジューラの実際のnew処理はこの呼出まで遅延される
      */
     @Deprecated
     Scheduler getScheduler(SubscribeTarget target) {
@@ -63,7 +62,6 @@ class ThreadControllerImpl {
      *
      * MEMO : スケジューラの実際のnew処理はこの呼出まで遅延される
      */
-    @Deprecated
     Scheduler getScheduler(ExecuteTarget target) {
         if (target == ExecuteTarget.NewThread) {
             return Schedulers.newThread();
@@ -83,7 +81,7 @@ class ThreadControllerImpl {
     }
 
     class ThreadItem {
-        ThreadPoolExecutor mExecutor;
+        Executor mExecutor;
         Scheduler mScheduler;
         ExecuteTarget mTarget;
 
@@ -94,7 +92,7 @@ class ThreadControllerImpl {
         public Scheduler getScheduler() {
             synchronized (this) {
                 if (mScheduler == null) {
-                    mExecutor = new ThreadPoolExecutor(0, mTarget.getThreadPoolNum(), mTarget.getKeepAliveMs(), TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+                    mExecutor = new ThreadPoolExecutor(mTarget.getThreadPoolNum(), mTarget.getThreadPoolNum(), mTarget.getKeepAliveMs(), TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
                     mScheduler = Schedulers.from(mExecutor);
                 }
                 return mScheduler;
