@@ -41,6 +41,7 @@ public class ParallelTaskGroup<T> {
                 while (iterator.hasNext()) {
                     BackgroundTask task = iterator.next();
                     task.throwIfCanceled();
+                    task.throwIfError();
 
                     // タスクが完了したので排除
                     if (task.isFinished()) {
