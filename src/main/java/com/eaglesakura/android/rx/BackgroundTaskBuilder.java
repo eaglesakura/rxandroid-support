@@ -11,7 +11,6 @@ import java.util.concurrent.TimeUnit;
 
 import rx.Observable;
 import rx.Subscriber;
-import rx.Subscription;
 import rx.android.schedulers.AndroidSchedulers;
 import rx.functions.Action1;
 
@@ -316,19 +315,25 @@ public class BackgroundTaskBuilder<T> {
             mStartedTask = true;
             // 開始タイミングをズラす
             mController.getHandler().post(() -> {
-                final Subscription subscribe = mObservable.subscribe(
+                mTask.mSubscription = mObservable.subscribe(
                         // next = completeed
                         next -> {
+                            mTask.mSubscription.unsubscribe();
+                            mController.remove(mTask.mSubscription);
+                            mTask.mSubscription = null;
                             mTask.setResult(next);
                         },
                         // error
                         error -> {
+                            mTask.mSubscription.unsubscribe();
+                            mController.remove(mTask.mSubscription);
+                            mTask.mSubscription = null;
                             mTask.setError(error);
                         }
                 );
 
                 // 購読対象に追加
-                mController.add(mTask.mCallbackTime, subscribe);
+                mController.add(mTask.mCallbackTime, mTask.mSubscription);
             });
         }
         return mTask;

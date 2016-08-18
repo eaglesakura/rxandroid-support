@@ -7,6 +7,8 @@ import com.eaglesakura.android.rx.error.TaskTimeoutException;
 import java.util.HashSet;
 import java.util.Set;
 
+import rx.Subscription;
+
 /**
  * 非同期実行されるタスクを管理する
  *
@@ -43,6 +45,11 @@ public class BackgroundTask<T> {
      * 現在の処理ステート
      */
     State mState = State.Building;
+
+    /**
+     * 購読データ
+     */
+    Subscription mSubscription;
 
     /**
      * コールバック対象を指定する

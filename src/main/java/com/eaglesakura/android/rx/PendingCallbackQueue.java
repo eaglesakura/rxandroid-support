@@ -132,6 +132,11 @@ public class PendingCallbackQueue {
         return this;
     }
 
+    PendingCallbackQueue remove(Subscription s) {
+        mSubscription.remove(s);
+        return this;
+    }
+
     /**
      * 実行クラスを渡し、処理を行わせる。
      * <p>
