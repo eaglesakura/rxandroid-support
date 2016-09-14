@@ -74,11 +74,11 @@ public class ParallelTaskGroup<T> {
          * 次のタスクを取得する
          */
         @Nullable
-        BackgroundTask<T> onNextTask(@NonNull ParallelTaskGroup<T> group);
+        BackgroundTask<T> onNextTask(@NonNull ParallelTaskGroup<T> group) throws Throwable;
 
         /**
          * タスクが完了した
          */
-        void onTaskCompleted(@NonNull ParallelTaskGroup<T> group, @NonNull BackgroundTask task);
+        void onTaskCompleted(@NonNull ParallelTaskGroup<T> group, @NonNull BackgroundTask task) throws Throwable;
     }
 }

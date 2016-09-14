@@ -92,7 +92,7 @@ class ThreadControllerImpl {
         public Scheduler getScheduler() {
             synchronized (this) {
                 if (mScheduler == null) {
-                    mExecutor = new ThreadPoolExecutor(mTarget.getThreadPoolNum(), mTarget.getThreadPoolNum(), mTarget.getKeepAliveMs(), TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+                    mExecutor = new ThreadPoolExecutor(0, mTarget.getThreadPoolNum(), mTarget.getKeepAliveMs(), TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
                     mScheduler = Schedulers.from(mExecutor);
                 }
                 return mScheduler;

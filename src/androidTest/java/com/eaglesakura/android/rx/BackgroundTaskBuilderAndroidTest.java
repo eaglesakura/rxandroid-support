@@ -13,12 +13,6 @@ import org.junit.Test;
 
 import rx.subjects.BehaviorSubject;
 
-import static junit.framework.Assert.assertEquals;
-import static junit.framework.Assert.assertFalse;
-import static junit.framework.Assert.assertNotNull;
-import static junit.framework.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
 public class BackgroundTaskBuilderAndroidTest extends DeviceTestCase {
 
     class LifecycleItem {
