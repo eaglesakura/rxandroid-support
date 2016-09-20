@@ -10,16 +10,6 @@ public enum SubscribeTarget {
      */
     Pipeline {
         @Override
-        int getKeepAliveMs() {
-            return 1000 * 5;
-        }
-
-        @Override
-        int getThreadPoolNum() {
-            return 1;
-        }
-
-        @Override
         ExecuteTarget asExecuteTarget() {
             return ExecuteTarget.LocalQueue;
         }
@@ -29,16 +19,6 @@ public enum SubscribeTarget {
      * 並列化されたスレッドプールで制御する
      */
     Parallels {
-        @Override
-        int getKeepAliveMs() {
-            return 1000 * 5;
-        }
-
-        @Override
-        int getThreadPoolNum() {
-            return 3;
-        }
-
         @Override
         ExecuteTarget asExecuteTarget() {
             return ExecuteTarget.LocalParallel;
@@ -50,16 +30,6 @@ public enum SubscribeTarget {
      */
     GlobalPipeline {
         @Override
-        int getKeepAliveMs() {
-            return 1000 * 3;
-        }
-
-        @Override
-        int getThreadPoolNum() {
-            return 1;
-        }
-
-        @Override
         ExecuteTarget asExecuteTarget() {
             return ExecuteTarget.GlobalQueue;
         }
@@ -69,16 +39,6 @@ public enum SubscribeTarget {
      * プロセス内で共有される並列化された処理
      */
     GlobalParallels {
-        @Override
-        int getKeepAliveMs() {
-            return 1000 * 3;
-        }
-
-        @Override
-        int getThreadPoolNum() {
-            return 5;
-        }
-
         @Override
         ExecuteTarget asExecuteTarget() {
             return ExecuteTarget.GlobalParallel;
@@ -92,17 +52,6 @@ public enum SubscribeTarget {
      */
     Network {
         @Override
-        int getKeepAliveMs() {
-            return 500;
-        }
-
-        @Override
-        int getThreadPoolNum() {
-            return 3;
-        }
-
-
-        @Override
         ExecuteTarget asExecuteTarget() {
             return ExecuteTarget.Network;
         }
@@ -112,16 +61,6 @@ public enum SubscribeTarget {
      * 専用スレッドを生成する
      */
     NewThread {
-        @Override
-        int getKeepAliveMs() {
-            return 0;
-        }
-
-        @Override
-        int getThreadPoolNum() {
-            return 0;
-        }
-
         @Override
         ExecuteTarget asExecuteTarget() {
             return ExecuteTarget.NewThread;
@@ -133,30 +72,10 @@ public enum SubscribeTarget {
      */
     MainThread {
         @Override
-        int getKeepAliveMs() {
-            return 0;
-        }
-
-        @Override
-        int getThreadPoolNum() {
-            return 0;
-        }
-
-        @Override
         ExecuteTarget asExecuteTarget() {
             return ExecuteTarget.MainThread;
         }
     };
-
-    /**
-     * スレッドキャッシュ時間を取得する
-     */
-    abstract int getKeepAliveMs();
-
-    /**
-     * 最大スレッド数を取得する
-     */
-    abstract int getThreadPoolNum();
 
     @Deprecated
     abstract ExecuteTarget asExecuteTarget();

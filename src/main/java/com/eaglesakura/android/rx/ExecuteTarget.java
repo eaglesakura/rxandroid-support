@@ -30,7 +30,7 @@ public enum ExecuteTarget {
 
         @Override
         int getThreadPoolNum() {
-            return 3;
+            return ExecuteTargetSettings.sLocalParallelsThreads;
         }
     },
 
@@ -60,7 +60,7 @@ public enum ExecuteTarget {
 
         @Override
         int getThreadPoolNum() {
-            return 5;
+            return ExecuteTargetSettings.sGlobalParallelsThreads;
         }
     },
 
@@ -77,7 +77,7 @@ public enum ExecuteTarget {
 
         @Override
         int getThreadPoolNum() {
-            return 3;
+            return ExecuteTargetSettings.sNetworkThreads;
         }
     },
 

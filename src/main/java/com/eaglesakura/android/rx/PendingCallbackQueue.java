@@ -177,6 +177,7 @@ public class PendingCallbackQueue {
      * @param callback  実行内容
      * @param timeoutMs 待ち時間
      */
+    @Deprecated
     public void runWithWait(CallbackTime time, Runnable callback, long timeoutMs) throws TimeoutException {
         Object lock = new Object();
         run(time, () -> {
