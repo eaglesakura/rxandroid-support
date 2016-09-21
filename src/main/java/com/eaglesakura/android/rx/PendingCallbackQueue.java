@@ -113,7 +113,7 @@ public class PendingCallbackQueue {
 
                 if (mState == LifecycleState.OnDestroyed) {
                     mThreadController.dispose();
-//                    mSubscription.unsubscribe();
+                    mSubscription.unsubscribe();
                 }
 
                 // 保留タスクがあれば流すように促す

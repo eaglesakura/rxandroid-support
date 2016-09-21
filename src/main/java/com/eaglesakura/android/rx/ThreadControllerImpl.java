@@ -2,7 +2,6 @@ package com.eaglesakura.android.rx;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -22,17 +21,17 @@ class ThreadControllerImpl {
     /**
      * プロセス共有シリアル
      */
-    private final ThreadItem sGlobalPipeline = new ThreadItem(ExecuteTarget.GlobalQueue);
+    private static final ThreadItem sGlobalPipeline = new ThreadItem(ExecuteTarget.GlobalQueue);
 
     /**
      * プロセス共有Parallels
      */
-    private final ThreadItem sGlobalParallels = new ThreadItem(ExecuteTarget.GlobalParallel);
+    private static final ThreadItem sGlobalParallels = new ThreadItem(ExecuteTarget.GlobalParallel);
 
     /**
      * プロセス共有ネットワーク
      */
-    private final ThreadItem sNetworks = new ThreadItem(ExecuteTarget.Network);
+    private static final ThreadItem sNetworks = new ThreadItem(ExecuteTarget.Network);
 
     public ThreadControllerImpl() {
         mThreads.add(new ThreadItem(ExecuteTarget.LocalQueue));
@@ -76,12 +75,13 @@ class ThreadControllerImpl {
      * 全てのスケジューラを開放する
      */
     public void dispose() {
-        mThreads.get(SubscribeTarget.Pipeline.ordinal()).dispose();
-        mThreads.get(SubscribeTarget.Parallels.ordinal()).dispose();
+        for (ThreadItem item : mThreads) {
+            item.dispose();
+        }
     }
 
-    class ThreadItem {
-        Executor mExecutor;
+    static class ThreadItem {
+        ThreadPoolExecutor mExecutor;
         Scheduler mScheduler;
         ExecuteTarget mTarget;
 
@@ -90,22 +90,41 @@ class ThreadControllerImpl {
         }
 
         public Scheduler getScheduler() {
-            synchronized (this) {
+            synchronized (ThreadControllerImpl.class) {
                 if (mScheduler == null) {
-                    mExecutor = new ThreadPoolExecutor(0, mTarget.getThreadPoolNum(), mTarget.getKeepAliveMs(), TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+                    mExecutor = new ThreadPoolExecutor(0, mTarget.getThreadPoolNum(), mTarget.getKeepAliveMs(), TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>()) {
+                        @Override
+                        public void execute(Runnable command) {
+                            try {
+                                setCorePoolSize(mTarget.getThreadPoolNum());
+                                super.execute(command);
+                            } finally {
+                                setCorePoolSize(0);
+                            }
+                        }
+                    };
                     mScheduler = Schedulers.from(mExecutor);
+                } else {
+                    mExecutor.setCorePoolSize(mTarget.getThreadPoolNum());
                 }
                 return mScheduler;
             }
         }
 
         public void dispose() {
-            synchronized (this) {
-                // MEMO: ThreadPoolは時間経過で自動的に消滅するため、明示的な解放は行わないようにする
-                // これはFire&Forgetでスレッドが処理される前にshutdownされることを防ぐため。
-//                if (mExecutor != null) {
-//                    mExecutor.shutdown();
-//                }
+            synchronized (ThreadControllerImpl.class) {
+                if (mExecutor != null) {
+//                    if (mTarget == ExecuteTarget.LocalQueue || mTarget == ExecuteTarget.LocalParallel) {
+//                        // ローカルは完全廃棄する
+//                        mExecutor.shutdown();
+//                        mExecutor.setCorePoolSize(0);
+//                    } else {
+//                        // スレッドプールを廃棄する
+//                        if (mExecutor.getQueue().isEmpty()) {
+//                            mExecutor.setCorePoolSize(0);
+//                        }
+//                    }
+                }
             }
         }
     }

@@ -20,9 +20,9 @@ public class ExecuteTargetSettings {
     static int sGlobalParallelsThreads = (sCpuCoreCount * 2);
 
     /**
-     * Google-Volleyが4を基本にしているが、端末の高性能化を考えるとそれよりも多くて問題ないはず。
+     * Google-Volleyに合わせて4, それ以上の設定では接続上限に達する恐れがある。
      */
-    static int sNetworkThreads = 6;
+    static int sNetworkThreads = 4;
 
     public static void setLocalParallelsThreads(int localParallelsThreads) {
         sLocalParallelsThreads = localParallelsThreads;
@@ -34,5 +34,21 @@ public class ExecuteTargetSettings {
 
     public static void setNetworkThreads(int networkThreads) {
         sNetworkThreads = networkThreads;
+    }
+
+    public static int getCpuCoreCount() {
+        return sCpuCoreCount;
+    }
+
+    public static int getLocalParallelsThreads() {
+        return sLocalParallelsThreads;
+    }
+
+    public static int getGlobalParallelsThreads() {
+        return sGlobalParallelsThreads;
+    }
+
+    public static int getNetworkThreads() {
+        return sNetworkThreads;
     }
 }

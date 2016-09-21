@@ -24,6 +24,10 @@ public class ParallelTaskGroup<T> {
         mCallback = callback;
     }
 
+    public void setMaxParallelTasks(int maxParallelTasks) {
+        mMaxParallelTasks = maxParallelTasks;
+    }
+
     /**
      * 全てのタスクが完了するまで待つ
      *
