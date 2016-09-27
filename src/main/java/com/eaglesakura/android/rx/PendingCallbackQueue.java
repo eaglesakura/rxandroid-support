@@ -1,11 +1,13 @@
 package com.eaglesakura.android.rx;
 
 
+import com.eaglesakura.android.rx.error.TaskCanceledException;
 import com.eaglesakura.android.rx.event.LifecycleEventImpl;
 
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
+import android.support.annotation.NonNull;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -227,6 +229,30 @@ public class PendingCallbackQueue {
     }
 
     /**
+     * キャンセルコールバックを指定して実行待ちを行う
+     */
+    public void runWithWait(CallbackTime callbackTime, Runnable callback, @NonNull CancelCallback cancelCallback) throws TaskCanceledException {
+        Object[] holder = new Object[1];
+        run(callbackTime, () -> {
+            try {
+                callback.run();
+            } finally {
+                holder[0] = new Object();
+            }
+        });
+
+        while (holder[0] == null) {
+            try {
+                if (cancelCallback.isCanceled()) {
+                    throw new TaskCanceledException();
+                }
+            } catch (Throwable e) {
+                throw new TaskCanceledException(e);
+            }
+        }
+    }
+
+    /**
      * 各ステートを制御する
      */
     class StateController {
@@ -318,4 +344,7 @@ public class PendingCallbackQueue {
         }
     }
 
+    public interface CancelCallback {
+        boolean isCanceled() throws Throwable;
+    }
 }
