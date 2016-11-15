@@ -15,6 +15,7 @@ import java.util.concurrent.TimeoutException;
 
 import rx.Observable;
 import rx.Subscription;
+import rx.functions.Action1;
 import rx.subjects.BehaviorSubject;
 import rx.subscriptions.CompositeSubscription;
 
@@ -101,6 +102,10 @@ public class PendingCallbackQueue {
 
     public Observable<LifecycleEvent> getObservable() {
         return mObservable;
+    }
+
+    public Subscription subscribe(Action1<? super LifecycleEvent> onNext) {
+        return mObservable.subscribe(onNext);
     }
 
     /**
