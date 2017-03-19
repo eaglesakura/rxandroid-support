@@ -25,6 +25,10 @@ public class BackgroundTaskBuilderAndroidTest extends DeviceTestCase {
             next(LifecycleState.OnStarted);
         }
 
+        public void onCreate() {
+            next(LifecycleState.OnCreated);
+        }
+
         public void onResume() {
             next(LifecycleState.OnResumed);
         }
@@ -49,7 +53,7 @@ public class BackgroundTaskBuilderAndroidTest extends DeviceTestCase {
         }
     }
 
-    @Test
+    //    @Test
     public void タスクのメモリリークがないことを確認する() throws Throwable {
         AndroidThreadUtil.assertBackgroundThread();
         assertTrue(isTestingThread());
@@ -84,42 +88,6 @@ public class BackgroundTaskBuilderAndroidTest extends DeviceTestCase {
             item.onPause();
             item.onDestroy();
         }
-    }
-
-    @Test
-    public void タスクチェインが実行されて最後の値が取得できる() throws Throwable {
-        AndroidThreadUtil.assertBackgroundThread();
-        assertTrue(isTestingThread());
-
-        LifecycleItem item = new LifecycleItem();
-        BackgroundTask rxTask;
-        try {
-            item.onResume();
-
-            rxTask = new BackgroundTaskBuilder<Boolean>(item.mCallbackQueue)
-                    .async(task -> {
-                        LogUtil.log("Call Async!");
-
-                        assertFalse(isTestingThread()); // バックグラウンドで実行されている
-                        task.waitTime(100);
-                        return true;
-                    })
-                    .callbackOn(CallbackTime.FireAndForget)
-                    .executeOn(ExecuteTarget.LocalQueue)
-                    .chain((ret, task) -> {
-                        LogUtil.log("Call Chain!!");
-                        assertFalse(isTestingThread());
-                        assertFalse(isTestingThread()); // バックグラウンドで実行されている
-                        task.waitTime(100);
-                        return Integer.valueOf(3103);
-                    }).start();
-
-        } finally {
-            item.onPause();
-            item.onDestroy();
-        }
-
-        assertEquals(rxTask.await(1000 * 5), Integer.valueOf(3103));
     }
 
     @Test
@@ -197,7 +165,258 @@ public class BackgroundTaskBuilderAndroidTest extends DeviceTestCase {
     }
 
     @Test
-    public void ライフサイクル状態によってタスクがキャンセルされる() throws Throwable {
+    public void ライフサイクル状態によってタスクが実行される_Alive() throws Throwable {
+        AndroidThreadUtil.assertBackgroundThread();
+        assertTrue(isTestingThread());
+
+        LifecycleItem item = new LifecycleItem();
+        BackgroundTask rxTask;
+        Holder<Boolean> callbackCheck = new Holder<>();
+        callbackCheck.set(Boolean.FALSE);
+        try {
+            item.onResume();
+
+            rxTask = new BackgroundTaskBuilder<>(item.mCallbackQueue)
+                    .async(task -> {
+                        LogUtil.log("Call Async!");
+
+                        assertFalse(isTestingThread()); // バックグラウンドで実行されている
+
+                        task.waitTime(500);
+                        return true;
+                    })
+                    .callbackOn(CallbackTime.Alive)
+                    .executeOn(ExecuteTarget.LocalQueue)
+                    .completed((it, task) -> {
+                        callbackCheck.set(Boolean.TRUE);
+                    }).canceled(task -> fail())
+                    .start();
+
+            item.onPause(); // アプリがバックグラウンドに移った
+            rxTask.await(1000); // 処理が終わるまで待つ
+            Util.sleep(100);
+
+            assertEquals(callbackCheck.get(), Boolean.TRUE);     // コールバックが実行されて、setされる。
+        } finally {
+            item.onPause();
+            item.onDestroy();
+        }
+    }
+
+    @Test
+    public void ライフサイクル状態によってタスクがキャンセルさる_Alive() throws Throwable {
+        AndroidThreadUtil.assertBackgroundThread();
+        assertTrue(isTestingThread());
+
+        LifecycleItem item = new LifecycleItem();
+        BackgroundTask rxTask;
+        Holder<Boolean> callbackCheck = new Holder<>();
+        callbackCheck.set(Boolean.FALSE);
+        try {
+            item.onResume();
+
+            rxTask = new BackgroundTaskBuilder<>(item.mCallbackQueue)
+                    .async(task -> {
+                        LogUtil.log("Call Async!");
+
+                        assertFalse(isTestingThread()); // バックグラウンドで実行されている
+
+                        task.waitTime(500);
+                        return true;
+                    })
+                    .callbackOn(CallbackTime.Alive)
+                    .executeOn(ExecuteTarget.LocalQueue)
+                    .completed((it, task) -> {
+                        callbackCheck.set(Boolean.TRUE);
+                    }).start();
+
+            item.onPause(); // アプリがバックグラウンドに移った
+            assertFalse(rxTask.isCanceled());
+            item.onDestroy(); // アプリが廃棄された
+            assertTrue(rxTask.isCanceled());
+            try {
+                rxTask.await(1000); // 処理が終わるまで待つ
+
+                fail(); // アプリがバックグラウンドにあるため、task.waitTimeによってキャンセル例外で死んでいるはずである
+            } catch (TaskCanceledException e) {
+                LogUtil.log("Task Canceled");
+            }
+            assertEquals(callbackCheck.get(), Boolean.FALSE);     // コールバックは捨てられるので、呼びだされてはならない。
+        } finally {
+        }
+    }
+
+    @Test
+    public void ライフサイクル状態によってタスクが実行される_FireAndForget() throws Throwable {
+        AndroidThreadUtil.assertBackgroundThread();
+        assertTrue(isTestingThread());
+
+        LifecycleItem item = new LifecycleItem();
+        BackgroundTask rxTask;
+        Holder<Boolean> callbackCheck = new Holder<>();
+        callbackCheck.set(Boolean.FALSE);
+        try {
+            item.onResume();
+
+            rxTask = new BackgroundTaskBuilder<>(item.mCallbackQueue)
+                    .async(task -> {
+                        LogUtil.log("Call Async!");
+
+                        assertFalse(isTestingThread()); // バックグラウンドで実行されている
+
+                        task.waitTime(500);
+                        return true;
+                    })
+                    .callbackOn(CallbackTime.FireAndForget)
+                    .executeOn(ExecuteTarget.LocalQueue)
+                    .completed((it, task) -> {
+                        callbackCheck.set(Boolean.TRUE);
+                    }).canceled(task -> fail()).start();
+
+            item.onPause(); // アプリがバックグラウンドに移った
+            item.onDestroy(); // アプリが廃棄された
+            rxTask.await(1000); // 処理が終わるまで待つ
+            Util.sleep(100);
+
+            assertEquals(callbackCheck.get(), Boolean.TRUE);     // コールバックが実行されて、setされる。
+        } finally {
+            item.onPause();
+            item.onDestroy();
+        }
+    }
+
+    @Test
+    public void ライフサイクル状態によってタスクがキャンセルされない_FireAndForget() throws Throwable {
+        AndroidThreadUtil.assertBackgroundThread();
+        assertTrue(isTestingThread());
+
+        LifecycleItem item = new LifecycleItem();
+        BackgroundTask rxTask;
+        Holder<Boolean> callbackCheck = new Holder<>();
+        callbackCheck.set(Boolean.FALSE);
+        try {
+            item.onResume();
+
+            rxTask = new BackgroundTaskBuilder<>(item.mCallbackQueue)
+                    .async(task -> {
+                        LogUtil.log("Call Async!");
+
+                        assertFalse(isTestingThread()); // バックグラウンドで実行されている
+
+                        task.waitTime(500);
+                        return true;
+                    })
+                    .callbackOn(CallbackTime.FireAndForget)
+                    .executeOn(ExecuteTarget.LocalQueue)
+                    .completed((it, task) -> {
+                        callbackCheck.set(Boolean.TRUE);
+                    }).canceled(task -> fail()).start();
+
+            item.onPause(); // アプリがバックグラウンドに移った
+            assertFalse(rxTask.isCanceled());
+            item.onDestroy(); // アプリが廃棄された
+            assertFalse(rxTask.isCanceled());
+            rxTask.await(1000); // 処理が終わるまで待つ
+            sleep(100);
+            assertEquals(callbackCheck.get(), Boolean.TRUE);     // コールバックが実行されているはずである
+        } finally {
+        }
+    }
+
+    @Test
+    public void ライフサイクル状態によってタスクが実行される_Foreground() throws Throwable {
+        AndroidThreadUtil.assertBackgroundThread();
+        assertTrue(isTestingThread());
+
+        LifecycleItem item = new LifecycleItem();
+        BackgroundTask rxTask;
+        Holder<Boolean> callbackCheck = new Holder<>();
+        callbackCheck.set(Boolean.FALSE);
+        try {
+            item.onResume();
+
+            rxTask = new BackgroundTaskBuilder<>(item.mCallbackQueue)
+                    .async(task -> {
+                        LogUtil.log("Call Async!");
+
+                        assertFalse(isTestingThread()); // バックグラウンドで実行されている
+
+                        task.waitTime(500);
+                        return true;
+                    })
+                    .callbackOn(CallbackTime.Foreground)
+                    .executeOn(ExecuteTarget.LocalQueue)
+                    .completed((it, task) -> {
+                        callbackCheck.set(Boolean.TRUE);
+                    }).canceled(task -> fail()).start();
+
+            item.onPause(); // アプリがバックグラウンドに移った
+            assertFalse(rxTask.isCanceled());
+            item.onResume(); // アプリがForegroundに戻った
+            assertFalse(rxTask.isCanceled());
+            item.onPause(); // アプリがバックグラウンドに移った
+
+            rxTask.await(1000); // 処理が終わるまで待つ
+
+            Util.sleep(100);
+            assertEquals(callbackCheck.get(), Boolean.FALSE);   // まだコールバックされていない
+
+            item.onResume();    // アプリがフォアグラウンドに復帰した
+            Util.sleep(100);
+
+            assertEquals(callbackCheck.get(), Boolean.TRUE);     // コールバックが実行されて、setされる。
+        } finally {
+            item.onPause();
+            item.onDestroy();
+        }
+    }
+
+    @Test
+    public void ライフサイクル状態によってタスクがキャンセルされる_Foreground() throws Throwable {
+        AndroidThreadUtil.assertBackgroundThread();
+        assertTrue(isTestingThread());
+
+        LifecycleItem item = new LifecycleItem();
+        BackgroundTask rxTask;
+        Holder<Boolean> callbackCheck = new Holder<>();
+        callbackCheck.set(Boolean.FALSE);
+        try {
+            item.onResume();
+
+            rxTask = new BackgroundTaskBuilder<>(item.mCallbackQueue)
+                    .async(task -> {
+                        LogUtil.log("Call Async!");
+
+                        assertFalse(isTestingThread()); // バックグラウンドで実行されている
+
+                        task.waitTime(500);
+                        return true;
+                    })
+                    .callbackOn(CallbackTime.Foreground)
+                    .executeOn(ExecuteTarget.LocalQueue)
+                    .completed((it, task) -> {
+                        fail();
+                    }).start();
+
+            item.onPause(); // アプリがバックグラウンドに移った
+            assertFalse(rxTask.isCanceled());
+            item.onDestroy(); // アプリが廃棄された
+            assertTrue(rxTask.isCanceled());
+
+            try {
+                rxTask.await(1000); // 処理が終わるまで待つ
+
+                fail(); // アプリがバックグラウンドにあるため、task.waitTimeによってキャンセル例外で死んでいるはずである
+            } catch (TaskCanceledException e) {
+                LogUtil.log("Task Canceled");
+            }
+            assertEquals(callbackCheck.get(), Boolean.FALSE);     // コールバックは捨てられるので、呼びだされてはならない。
+        } finally {
+        }
+    }
+
+    @Test
+    public void ライフサイクル状態によってタスクが実行される_CurrentForeground() throws Throwable {
         AndroidThreadUtil.assertBackgroundThread();
         assertTrue(isTestingThread());
 
@@ -221,9 +440,54 @@ public class BackgroundTaskBuilderAndroidTest extends DeviceTestCase {
                     .executeOn(ExecuteTarget.LocalQueue)
                     .completed((it, task) -> {
                         callbackCheck.set(Boolean.TRUE);
+                    }).canceled(task -> fail()).start();
+
+
+            rxTask.await(1000); // 処理が終わるまで待つ
+            sleep(100);
+
+            assertEquals(callbackCheck.get(), Boolean.TRUE);     // コールバックが実行されて、setされる。
+        } finally {
+            item.onPause();
+            item.onDestroy();
+        }
+    }
+
+    @Test
+    public void ライフサイクル状態によってタスクがキャンセルされる_CurrentForeground() throws Throwable {
+        AndroidThreadUtil.assertBackgroundThread();
+        assertTrue(isTestingThread());
+
+        LifecycleItem item = new LifecycleItem();
+        BackgroundTask rxTask;
+        Holder<Boolean> callbackCheck = new Holder<>();
+        callbackCheck.set(Boolean.FALSE);
+        try {
+            item.onResume();
+
+            rxTask = new BackgroundTaskBuilder<>(item.mCallbackQueue)
+                    .async(task -> {
+                        LogUtil.log("Call Async!");
+
+                        assertFalse(isTestingThread()); // バックグラウンドで実行されている
+
+                        task.waitTime(500);
+                        return true;
+                    })
+                    .callbackOn(CallbackTime.CurrentForeground)
+                    .executeOn(ExecuteTarget.LocalQueue)
+                    .completed((it, task) -> {
+                        fail();
                     }).start();
 
             item.onPause(); // アプリがバックグラウンドに移った
+
+            // 一度でもStateが変わったらキャンセル扱いである
+            assertTrue(rxTask.isCanceled());
+            item.onResume(); // アプリがForegroundに戻った
+            assertTrue(rxTask.isCanceled());
+            item.onPause(); // アプリがバックグラウンドに移った
+
             try {
                 rxTask.await(1000); // 処理が終わるまで待つ
 
@@ -231,9 +495,6 @@ public class BackgroundTaskBuilderAndroidTest extends DeviceTestCase {
             } catch (TaskCanceledException e) {
                 LogUtil.log("Task Canceled");
             }
-
-            Util.sleep(100);
-            assertEquals(callbackCheck.get(), Boolean.FALSE);   // まだコールバックされていない
 
             item.onResume();    // アプリがフォアグラウンドに復帰した
             Util.sleep(100);

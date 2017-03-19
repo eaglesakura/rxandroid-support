@@ -64,25 +64,6 @@ public class BackgroundTaskBuilder<T> {
         return this;
     }
 
-
-    /**
-     * 処理対象のスレッドを指定する
-     */
-    @Deprecated
-    public BackgroundTaskBuilder<T> subscribeOn(SubscribeTarget target) {
-        mThreadTarget = target.asExecuteTarget();
-        return this;
-    }
-
-    /**
-     * コールバック対象のタイミングを指定する
-     */
-    @Deprecated
-    public BackgroundTaskBuilder<T> observeOn(ObserveTarget target) {
-        mTask.mCallbackTime = target.asCallbackTarget();
-        return this;
-    }
-
     /**
      * コールバック対象のタイミングを指定する
      */
@@ -95,7 +76,7 @@ public class BackgroundTaskBuilder<T> {
      * ユーザのキャンセルチェックを有効化する
      */
     public BackgroundTaskBuilder<T> cancelSignal(BackgroundTask.Signal signal) {
-        mTask.mUserCancelSignals.add(signal);
+        mTask.mCancelSignals.add(signal);
         return this;
     }
 
@@ -278,19 +259,6 @@ public class BackgroundTaskBuilder<T> {
         return this;
     }
 
-    /**
-     * 現在構築中のタスクが正常終了した後に、連続して呼び出されるタスクを生成する。
-     */
-    public <R> BackgroundTaskBuilder<R> chain(BackgroundTask.AsyncChain<T, R> action) {
-        BackgroundTaskBuilder<R> result = new BackgroundTaskBuilder<R>(this, mController)
-                .executeOn(mThreadTarget)
-                .callbackOn(mTask.mCallbackTime)
-                .async((BackgroundTask<R> chainTask) -> action.call((T) mTask.getResult(), chainTask));
-
-        mTask.mChainTask = result;
-        return result;
-    }
-
     public boolean isStartedTask() {
         return mStartedTask;
     }
@@ -302,7 +270,6 @@ public class BackgroundTaskBuilder<T> {
         // 実行準備する
         mTask.mState = BackgroundTask.State.Pending;
         // キャンセルを購読対象と同期させる
-        mTask.mSubscribeCancelSignal = (task) -> mController.isCanceled(mTask.mCallbackTime);
 
         if (mParentBuilder != null && !mParentBuilder.isStartedTask()) {
             // 親がいるなら、親を開始する
@@ -314,7 +281,10 @@ public class BackgroundTaskBuilder<T> {
             }
             mStartedTask = true;
             // 開始タイミングをズラす
-            mController.getHandler().post(() -> {
+            mController.sHandler.post(() -> {
+                PendingCallbackQueue.State dumpState = mController.getCurrentState().dump();
+                BackgroundTask.Signal signal = task -> mController.isCanceled(mTask.mCallbackTime, dumpState);
+                mTask.mCancelSignals.add(signal);
                 mTask.mSubscription = mObservable.subscribe(
                         // next = completeed
                         next -> {

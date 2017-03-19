@@ -24,12 +24,7 @@ public class BackgroundTask<T> {
     /**
      * 外部から指定されたキャンセルチェック
      */
-    Set<Signal> mUserCancelSignals = new HashSet<>();
-
-    /**
-     * 購読対象からのキャンセルチェック
-     */
-    Signal mSubscribeCancelSignal;
+    Set<Signal> mCancelSignals = new HashSet<>();
 
     /**
      * 受信したエラー
@@ -187,6 +182,10 @@ public class BackgroundTask<T> {
     public T await(long timeoutMs) throws Throwable {
         final long START_TIME = System.currentTimeMillis();
         while (!isFinished() && ((System.currentTimeMillis() - START_TIME) < timeoutMs)) {
+            if (isCanceled()) {
+                throw new TaskCanceledException();
+            }
+
             try {
                 Thread.sleep(1);
             } catch (Exception e) {
@@ -238,19 +237,15 @@ public class BackgroundTask<T> {
      * タスクがキャンセル状態であればtrue
      */
     public boolean isCanceled() {
+        if (mError != null && (mError instanceof TaskCanceledException)) {
+            return true;
+        }
+
         // キャンセルシグナルに一つでも引っかかったらtrue
-        for (Signal signal : mUserCancelSignals) {
+        for (Signal signal : mCancelSignals) {
             if (signal.is(this)) {
                 return true;
             }
-        }
-
-        if (mSubscribeCancelSignal != null & mSubscribeCancelSignal.is(this)) {
-            return true;
-        }
-
-        if (mError != null && (mError instanceof TaskCanceledException)) {
-            return true;
         }
 
         return false;
@@ -407,13 +402,6 @@ public class BackgroundTask<T> {
      */
     public interface Async<T> {
         T call(BackgroundTask<T> task) throws Throwable;
-    }
-
-    /**
-     * 非同期連続処理を記述する
-     */
-    public interface AsyncChain<T, R> {
-        R call(T before, BackgroundTask<R> task) throws Throwable;
     }
 
     /**

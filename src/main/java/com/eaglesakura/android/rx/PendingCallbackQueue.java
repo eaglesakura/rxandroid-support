@@ -5,7 +5,6 @@ import com.eaglesakura.android.rx.error.TaskCanceledException;
 import com.eaglesakura.android.rx.event.LifecycleEventImpl;
 
 import android.os.Handler;
-import android.os.HandlerThread;
 import android.os.Looper;
 import android.support.annotation.NonNull;
 
@@ -25,6 +24,13 @@ import rx.subscriptions.CompositeSubscription;
  * Fragment等と関連付けられ、そのライフサイクルを離れると自動的にコールバックを呼びださなくする。
  */
 public class PendingCallbackQueue {
+
+    /**
+     * 処理をワンテンポ遅らせるためのハンドラ
+     */
+    static Handler sHandler = new Handler(Looper.getMainLooper());
+
+
     /**
      * 通常処理されるSubscription
      */
@@ -38,66 +44,36 @@ public class PendingCallbackQueue {
     /**
      * 初期ステートはNew
      */
-    private LifecycleState mState = LifecycleState.NewObject;
+    private State mState = new State(LifecycleState.NewObject, 0);
 
     private ThreadControllerImpl mThreadController = new ThreadControllerImpl();
-
-    /**
-     * 処理をワンテンポ遅らせるためのハンドラ
-     */
-    private Handler mHandler = new Handler(Looper.getMainLooper());
 
     private Observable<LifecycleEvent> mObservable;
 
     public PendingCallbackQueue() {
-        for (CallbackTime obs : CallbackTime.values()) {
-            mStateControllers.add(new StateController(obs));
+        for (CallbackTime callbackTime : CallbackTime.values()) {
+            mStateControllers.add(callbackTime.newStateController());
         }
     }
 
     /**
      * 現在認識されているステートを取得する
      */
+    @Deprecated
     public LifecycleState getState() {
-        return mState;
+        return mState.getState();
     }
 
     /**
-     * ユニットテスト用のハンドラを構築する
+     * 現在の状態を取得する
      */
-    @Deprecated
-    public PendingCallbackQueue startUnitTest() {
-        HandlerThread handlerThread = new HandlerThread("UnitTestCallback");
-        handlerThread.start();
-        mHandler = new Handler(handlerThread.getLooper());
-        return this;
+    @NonNull
+    public State getCurrentState() {
+        return mState;
     }
 
     public ThreadControllerImpl getThreadController() {
         return mThreadController;
-    }
-
-    public Handler getHandler() {
-        return mHandler;
-    }
-
-    /**
-     * 指定したコールバック受付が強制キャンセルならばtrue
-     *
-     * @param observeTarget 受付先
-     */
-    @Deprecated
-    public boolean isCanceled(ObserveTarget observeTarget) {
-        return mStateControllers.get(observeTarget.ordinal()).isCanceled();
-    }
-
-    /**
-     * 指定したコールバック受付が強制キャンセルならばtrue
-     *
-     * @param time コールバック対象タイミング
-     */
-    public boolean isCanceled(CallbackTime time) {
-        return mStateControllers.get(time.ordinal()).isCanceled();
     }
 
     public Observable<LifecycleEvent> getObservable() {
@@ -115,17 +91,17 @@ public class PendingCallbackQueue {
         mObservable = behavior.asObservable();
         mObservable.subscribe(next -> {
             // 継承されたActivityやFragmentはsuper.onの呼び出しで前後が生じるため、統一させるために必ずワンテンポ処理を遅らせる
-            mHandler.post(() -> {
-                mState = next.getState();
+            sHandler.post(() -> {
+                mState = mState.nextState(next.getState());
 
-                if (mState == LifecycleState.OnDestroyed) {
+                if (mState.getState() == LifecycleState.OnDestroyed) {
                     mThreadController.dispose();
                     mSubscription.unsubscribe();
                 }
 
                 // 保留タスクがあれば流すように促す
                 for (StateController ctrl : mStateControllers) {
-                    ctrl.onNext();
+                    ctrl.onNext(this);
                 }
             });
         });
@@ -144,14 +120,16 @@ public class PendingCallbackQueue {
         return this;
     }
 
+    private StateController getController(CallbackTime time) {
+        return mStateControllers.get(time.ordinal());
+    }
+
     /**
-     * 実行クラスを渡し、処理を行わせる。
-     * <p>
-     * 実行保留中であれば一旦キューに貯め、resumeのタイミングでキューを全て実行させる。
+     * @param time      コールしたいタイミング
+     * @param dumpState タスク開始時のステート
      */
-    @Deprecated
-    public void run(ObserveTarget target, Runnable callback) {
-        run(target.asCallbackTarget(), callback);
+    public boolean isCanceled(CallbackTime time, State dumpState) {
+        return getController(time).isCanceled(this, dumpState);
     }
 
     /**
@@ -160,7 +138,7 @@ public class PendingCallbackQueue {
      * 実行保留中であれば一旦キューに貯め、resumeのタイミングでキューを全て実行させる。
      */
     public void run(CallbackTime target, Runnable callback) {
-        mStateControllers.get(target.ordinal()).run(callback);
+        getController(target).run(this, new PendingTask(callback, mState.dump()));
     }
 
     /**
@@ -169,6 +147,19 @@ public class PendingCallbackQueue {
     public static PendingCallbackQueue newUnitTestController() {
         BehaviorSubject<LifecycleEvent> behavior = BehaviorSubject.create(new LifecycleEventImpl(LifecycleState.NewObject));
         behavior.onNext(new LifecycleEventImpl(LifecycleState.OnResumed));
+
+        PendingCallbackQueue controller = new PendingCallbackQueue();
+        controller.bind(behavior);
+        return controller;
+    }
+
+    /**
+     * デフォルト構成で生成する
+     *
+     * 状態はNewObjectとなる
+     */
+    public static PendingCallbackQueue newInstance() {
+        BehaviorSubject<LifecycleEvent> behavior = BehaviorSubject.create(new LifecycleEventImpl(LifecycleState.NewObject));
 
         PendingCallbackQueue controller = new PendingCallbackQueue();
         controller.bind(behavior);
@@ -188,35 +179,6 @@ public class PendingCallbackQueue {
     public void runWithWait(CallbackTime time, Runnable callback, long timeoutMs) throws TimeoutException {
         Object lock = new Object();
         run(time, () -> {
-            try {
-                callback.run();
-            } finally {
-                synchronized (lock) {
-                    lock.notifyAll();
-                }
-            }
-        });
-        synchronized (lock) {
-            try {
-                lock.wait(timeoutMs);
-            } catch (Exception e) {
-            }
-        }
-    }
-
-    /**
-     * 実行クラスを渡し、実行待ちを行う。
-     *
-     * デッドロック等の事情によりタイムアウトやフリーズの原因になるので、実行には注意すること。
-     *
-     * @param target    実行条件
-     * @param callback  実行内容
-     * @param timeoutMs 待ち時間
-     */
-    @Deprecated
-    public void runWithWait(ObserveTarget target, Runnable callback, long timeoutMs) throws TimeoutException {
-        Object lock = new Object();
-        run(target, () -> {
             try {
                 callback.run();
             } finally {
@@ -257,99 +219,111 @@ public class PendingCallbackQueue {
         }
     }
 
-    /**
-     * 各ステートを制御する
-     */
-    class StateController {
-        CallbackTime mCallbackTarget;
+    public interface CancelCallback {
+        boolean isCanceled() throws Throwable;
+    }
 
-        List<Runnable> mPendings = new ArrayList<>();
-
-        public StateController(CallbackTime callbackTarget) {
-            mCallbackTarget = callbackTarget;
-        }
+    public static class PendingTask {
+        /**
+         * タスク本体
+         */
+        Runnable mAction;
 
         /**
-         * 強制的にキャンセルさせるならばtrue
+         * タスクが発行されたタイミングでのステート
          */
-        boolean isCanceled() {
-            if (mCallbackTarget == CallbackTime.FireAndForget) {
-                // 打ちっぱなしならキャンセルはしなくて良い
-                return false;
-            } else if (mCallbackTarget == CallbackTime.CurrentForeground) {
-                // resume状態以外はキャンセルとして扱う
-                return mState.ordinal() >= LifecycleState.OnPaused.ordinal() || mSubscription.isUnsubscribed();
-            } else {
-                // それ以外なら購読フラグと連動する
-                return mSubscription.isUnsubscribed();
-            }
+        State mDumpState;
+
+        public PendingTask(Runnable action, State dumpState) {
+            mAction = action;
+            mDumpState = dumpState;
         }
 
-        /**
-         * 保留状態であればtrue
-         */
-        boolean isPending() {
-            if (mState == null || mCallbackTarget == CallbackTime.FireAndForget) {
-                // ステートが指定されてないか、撃ちっぱなしであれば保留は行わない
-                return false;
-            }
-
-            switch (mCallbackTarget) {
-                // オブジェクトがForegroundにあるなら
-                case Foreground:
-                case CurrentForeground: {
-                    return mState.ordinal() < LifecycleState.OnResumed.ordinal()
-                            || mState.ordinal() >= LifecycleState.OnPaused.ordinal();
-                }
-                // オブジェクトが生きているなら
-                case Alive: {
-                    return mState.ordinal() < LifecycleState.OnCreated.ordinal()
-                            || mState.ordinal() >= LifecycleState.OnDestroyed.ordinal();
-                }
-                default:
-                    // not impl
-                    throw new IllegalStateException();
-            }
+        public void run() {
+            mAction.run();
         }
 
-        void onNext() {
-            if (mCallbackTarget == CallbackTime.CurrentForeground && mState == LifecycleState.OnResumed) {
-                // Pauseを解除されたタイミングで、保留コールバックを全て排除する
-                mPendings.clear();
-            }
-
-            if (!mPendings.isEmpty() && !isPending()) {
-                // 保留から解除されたら、保留されていたタスクを流す
-                List<Runnable> executes = new ArrayList<>(mPendings);
-                mPendings.clear();
-                mHandler.post(() -> {
-                    if (mSubscription.isUnsubscribed()) {
-                        // 未購読状態になっているので何もしない
-                        return;
-                    }
-
-                    for (Runnable call : executes) {
-                        call.run();
-                    }
-                });
-            }
-        }
-
-        /**
-         * コールバックを追加する
-         */
-        void run(Runnable callback) {
-            if (isPending()) {
-                mPendings.add(callback);
-            } else if (Thread.currentThread().equals(mHandler.getLooper().getThread())) {
-                callback.run();
-            } else {
-                mHandler.post(callback);
-            }
+        public State getDumpState() {
+            return mDumpState;
         }
     }
 
-    public interface CancelCallback {
-        boolean isCanceled() throws Throwable;
+
+    /**
+     * 現在のステートを管理する
+     */
+    public static class State {
+        /**
+         * 現在のステートを管理する
+         */
+        private final LifecycleState mState;
+
+        /**
+         * ステート変更番号
+         * 必ずインクリメントされる
+         */
+        private final int mStateChangeCount;
+
+        State(LifecycleState state, int changeNumber) {
+            mState = state;
+            mStateChangeCount = changeNumber;
+        }
+
+        public LifecycleState getState() {
+            return mState;
+        }
+
+        public int getStateChangeCount() {
+            return mStateChangeCount;
+        }
+
+        /**
+         * オブジェクトが作成状態であればtrue
+         */
+        public boolean isCreated() {
+            return mState.ordinal() >= LifecycleState.OnCreated.ordinal();
+        }
+
+        /**
+         * Foreground状態であればtrue
+         */
+        public boolean isForeground() {
+            return mState == LifecycleState.OnResumed;
+        }
+
+        /**
+         * オブジェクトが廃棄状態であればtrue
+         */
+        public boolean isDestroyed() {
+            return mState.ordinal() >= LifecycleState.OnDestroyed.ordinal();
+        }
+
+        public synchronized State nextState(LifecycleState nextLifecycle) {
+            return new State(nextLifecycle, mStateChangeCount + 1);
+        }
+
+        public State dump() {
+//            return new State(mState, mStateChangeCount);
+            return this;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+
+            State state = (State) o;
+
+            if (mStateChangeCount != state.mStateChangeCount) return false;
+            return mState == state.mState;
+
+        }
+
+        @Override
+        public int hashCode() {
+            int result = mState != null ? mState.hashCode() : 0;
+            result = 31 * result + mStateChangeCount;
+            return result;
+        }
     }
 }

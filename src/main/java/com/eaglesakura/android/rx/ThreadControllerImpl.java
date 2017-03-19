@@ -43,21 +43,6 @@ class ThreadControllerImpl {
 
     /**
      * 処理対象のスケジューラを取得する
-     */
-    @Deprecated
-    Scheduler getScheduler(SubscribeTarget target) {
-        if (target == SubscribeTarget.NewThread) {
-            return Schedulers.newThread();
-        } else if (target == SubscribeTarget.MainThread) {
-            return AndroidSchedulers.mainThread();
-        } else {
-            return mThreads.get(target.ordinal()).getScheduler();
-        }
-    }
-
-
-    /**
-     * 処理対象のスケジューラを取得する
      *
      * MEMO : スケジューラの実際のnew処理はこの呼出まで遅延される
      */
